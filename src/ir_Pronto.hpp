@@ -12,7 +12,7 @@
  ************************************************************************************
  * MIT License
  *
- * Copyright (c) 2020 Bengt Martensson
+ * Copyright (c) 2020-2025 Bengt Martensson, Armin Joachimsmeyer
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -101,7 +101,7 @@ void IRsend::sendPronto(const uint16_t *data, uint16_t length, int_fast8_t aNumb
     uint16_t durations[intros + repeats];
     for (uint16_t i = 0; i < intros + repeats; i++) {
         uint32_t duration = ((uint32_t) data[i + numbersInPreamble]) * timebase;
-        durations[i] = (uint16_t) ((duration <= UINT16_MAX) ? duration : UINT16_MAX);
+        durations[i] = (uint16_t)((duration <= UINT16_MAX) ? duration : UINT16_MAX);
     }
 
     /*
@@ -215,20 +215,29 @@ static char hexDigit(uint16_t x) {
     return (char) (x <= 9 ? ('0' + x) : ('A' + (x - 10)));
 }
 
-static void dumpDigit(Print *aSerial, uint16_t number) {
+static void dumpHexDigit(Print *aSerial, uint16_t number) {
     aSerial->print(hexDigit(number));
 }
 
-static void dumpNumber(Print *aSerial, uint16_t number) {
+static void dumpHexNumber(Print *aSerial, uint16_t number) {
+    // Loop through all 4 nibbles
     for (uint16_t i = 0; i < digitsInProntoNumber; i++) {
         uint16_t shifts = bitsInHexadecimal * (digitsInProntoNumber - 1 - i);
-        dumpDigit(aSerial, (number >> shifts) & hexMask);
+        dumpHexDigit(aSerial, (number >> shifts) & hexMask);
     }
     aSerial->print(' ');
 }
 
+// deprecated
+static void dumpNumber(Print *aSerial, uint16_t number) {
+    dumpHexNumber(aSerial, number);
+}
+static void dumpDigit(Print *aSerial, uint16_t number) {
+    dumpHexDigit(aSerial, number);
+}
+
 static void dumpDuration(Print *aSerial, uint32_t duration, uint16_t timebase) {
-    dumpNumber(aSerial, (duration + timebase / 2) / timebase);
+    dumpHexNumber(aSerial, (duration + timebase / 2) / timebase);
 }
 
 /*
@@ -253,16 +262,17 @@ static void compensateAndDumpSequence(Print *aSerial, const volatile IRRawbufTyp
 /**
  * Print the result (second argument) as Pronto Hex on the Print supplied as argument.
  * Used in the ReceiveDump example.
+ * Do not print repeat sequence data.
  * @param aSerial The Print object on which to write, for Arduino you can use &Serial.
  * @param aFrequencyHertz Modulation frequency in Hz. Often 38000Hz.
  */
 void IRrecv::compensateAndPrintIRResultAsPronto(Print *aSerial, uint16_t aFrequencyHertz) {
-    aSerial->println(F("Pronto Hex as string"));
+    aSerial->println(F("Pronto Hex as string without repeat sequence"));
     aSerial->print(F("char prontoData[] = \""));
-    dumpNumber(aSerial, aFrequencyHertz > 0 ? learnedToken : learnedNonModulatedToken);
-    dumpNumber(aSerial, toFrequencyCode(aFrequencyHertz));
-    dumpNumber(aSerial, (decodedIRData.rawlen + 1) / 2);
-    dumpNumber(aSerial, 0);
+    dumpHexNumber(aSerial, aFrequencyHertz > 0 ? learnedToken : learnedNonModulatedToken);
+    dumpHexNumber(aSerial, toFrequencyCode(aFrequencyHertz));
+    dumpHexNumber(aSerial, (decodedIRData.rawlen + 1) / 2);
+    dumpHexNumber(aSerial, 0); // no repeat data
     uint16_t timebase = toTimebase(aFrequencyHertz);
     compensateAndDumpSequence(aSerial, &decodedIRData.rawDataPtr->rawbuf[1], decodedIRData.rawlen - 1, timebase); // skip leading space
     aSerial->println(F("\";"));
@@ -333,8 +343,7 @@ size_t IRrecv::compensateAndStorePronto(String *aString, uint16_t frequency) {
     size += dumpNumber(aString, toFrequencyCode(frequency));
     size += dumpNumber(aString, (decodedIRData.rawlen + 1) / 2);
     size += dumpNumber(aString, 0);
-    size += compensateAndDumpSequence(aString, &decodedIRData.rawDataPtr->rawbuf[1], decodedIRData.rawlen - 1,
-            timebase); // skip leading space
+    size += compensateAndDumpSequence(aString, &decodedIRData.rawDataPtr->rawbuf[1], decodedIRData.rawlen - 1, timebase); // skip leading space
 
     return size;
 }
